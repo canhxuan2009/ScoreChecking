@@ -162,7 +162,7 @@ class DiscordGatewayClient extends EventEmitter {
       const options = {
         hostname: 'discord.com',
         port: 443,
-        path: `/api/v9${path}`,
+        path: path.startsWith('/api/') ? path : `/api/v9${path}`,
         method,
         headers,
       };
@@ -652,13 +652,17 @@ class DiscordGatewayClient extends EventEmitter {
         currentVideoTime += 60;
         if (currentVideoTime > target) currentVideoTime = target;
         
-        // Thử gửi vào endpoint video-progress
-        res = await this.discordRequest('POST', `/quests/${questId}/video-progress`, { timestamp: currentVideoTime });
+        // Video Quest yêu cầu API v10 và timestamp BẮT BUỘC phải là số thập phân (float)
+        // Dùng Math.random() để tạo phần thập phân ngẫu nhiên cho mọi request, giả lập thời gian xem thực tế
+        const floatTimestamp = currentVideoTime + Math.random();
+        
+        // Gửi vào endpoint video-progress của v10
+        res = await this.discordRequest('POST', `/api/v10/quests/${questId}/video-progress`, { timestamp: floatTimestamp });
         
         // Nếu endpoint video không tồn tại (404), thử dùng heartbeat tiêu chuẩn
         if (res.status === 404) {
             console.log(`⚠️ [${questId}] video-progress trả về 404, chuyển sang dùng heartbeat tiêu chuẩn...`);
-            res = await this.discordRequest('POST', `/quests/${questId}/heartbeat`, { terminal: false });
+            res = await this.discordRequest('POST', `/api/v10/quests/${questId}/heartbeat`, { terminal: false });
         }
       } else {
         // Gửi heartbeat chơi game
