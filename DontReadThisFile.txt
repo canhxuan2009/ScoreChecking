@@ -1,0 +1,5 @@
+# Discord User Token
+DISCORD_TOKEN=MTA1MzY0NjEwNzc4NTMwMjA2OQ.GjBYwY.Oae1WLfALBYwMdPmE3PSaM4BVFX0EfZG0MbK8Y
+
+# 1: Bravery (Tím), 2: Brilliance (Đỏ), 3: Balance (Xanh lá)
+HYPESQUAD_HOUSE_ID=1
