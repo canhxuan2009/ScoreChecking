@@ -122,6 +122,8 @@ class DiscordGatewayClient extends EventEmitter {
     this.questIntervals = new Map();    // Map lưu các interval heartbeat của quest
     this.activeActivities = new Map();  // Map lưu các trạng thái đang chơi game
     this.MAX_CONCURRENT_QUESTS = 2;     // Chạy tối đa 2 quest cùng lúc
+    this.reconnectAttempts = 0;         // Số lần thử kết nối lại liên tiếp
+    this.MAX_RECONNECT_ATTEMPTS = 5;    // Giới hạn kết nối lại tối đa 5 lần
   }
 
   // Helper cho API Discord
@@ -334,6 +336,7 @@ class DiscordGatewayClient extends EventEmitter {
       case 'READY':
         this.sessionId = data.session_id;
         this.resumeGatewayUrl = data.resume_gateway_url;
+        this.reconnectAttempts = 0; // Reset số lần reconnect thành công
         console.log(`\n🎉 Đăng nhập thành công: ${data.user.username}#${data.user.discriminator} (Guilds: ${data.guilds.length}, ID: ${data.user.id})`);
 
         // Khởi động trình quản lý Quest (Lấy danh sách và chạy)
@@ -344,6 +347,7 @@ class DiscordGatewayClient extends EventEmitter {
       case 'RESUMED':
         console.log('✅ Session đã được khôi phục (RESUMED)');
         this.isReconnecting = false;
+        this.reconnectAttempts = 0; // Reset số lần reconnect thành công
         break;
 
       // Các event khác - chỉ log tên
@@ -792,8 +796,16 @@ class DiscordGatewayClient extends EventEmitter {
       return;
     }
 
+    if (this.reconnectAttempts >= this.MAX_RECONNECT_ATTEMPTS) {
+      console.log(`\n❌ Đã thử kết nối lại ${this.MAX_RECONNECT_ATTEMPTS} lần thất bại. Tắt phiên.`);
+      this.emit('error', { message: `Mất kết nối với Discord (Không nhận được Heartbeat ACK sau ${this.MAX_RECONNECT_ATTEMPTS} lần thử lại).` });
+      this.disconnect();
+      return;
+    }
+
+    this.reconnectAttempts++;
     const delay = 5000;
-    console.log(`🔄 Reconnect sau ${delay / 1000}s...`);
+    console.log(`\n🔄 Reconnect (Lần ${this.reconnectAttempts}/${this.MAX_RECONNECT_ATTEMPTS}) sau ${delay / 1000}s...`);
     this.isReconnecting = true;
     setTimeout(() => this.connect(), delay);
   }

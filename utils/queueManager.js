@@ -282,6 +282,13 @@ async function startNext(botClient) {
         // Gửi DM thông báo lỗi
         await sendDM(botClient, userId, `❌ **Lỗi Auto Quest:** ${data.message}\nPhiên đã bị hủy. Vui lòng thử lại.`, activeSession.channelId);
 
+        // Ngắt kết nối gateway để dọn dẹp timer
+        try {
+            gwClient.disconnect();
+        } catch (disErr) {
+            console.error('[Queue] Lỗi khi ngắt kết nối gateway:', disErr.message);
+        }
+
         // Xóa session
         clearSession();
 
