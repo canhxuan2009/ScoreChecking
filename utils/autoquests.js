@@ -668,8 +668,19 @@ class DiscordGatewayClient extends EventEmitter {
     const questId = quest.config.id;
     const appId = quest.config.application?.id;
 
+    let currentVideoTime = 0; // Biến lưu thời gian đã xem (dành cho Video Quest)
+
     const sendBeat = async () => {
-      const res = await this.discordRequest('POST', `/quests/${questId}/heartbeat`, { terminal: false });
+      let res;
+      if (isVideo) {
+        currentVideoTime += 60;
+        if (currentVideoTime > target) currentVideoTime = target;
+        // Gửi tiến độ xem video (tính bằng giây)
+        res = await this.discordRequest('POST', `/quests/${questId}/video-progress`, { timestamp: currentVideoTime });
+      } else {
+        // Gửi heartbeat chơi game
+        res = await this.discordRequest('POST', `/quests/${questId}/heartbeat`, { terminal: false });
+      }
       
       if (res.status !== 200) {
         console.log(`⚠️ [${questId}] Heartbeat trả về lỗi ${res.status}`);
@@ -679,7 +690,7 @@ class DiscordGatewayClient extends EventEmitter {
       // Đọc phần trăm hoàn thành
       let progress = 0;
       if (isVideo) {
-        progress = res.body.progress?.WATCH_VIDEO_ON_MOBILE?.value || res.body.progress?.WATCH_VIDEO?.value || 0;
+        progress = res.body.progress?.WATCH_VIDEO_ON_MOBILE?.value || res.body.progress?.WATCH_VIDEO?.value || currentVideoTime;
       } else {
         progress = res.body.progress?.PLAY_ON_DESKTOP?.value || res.body.progress?.PLAY_ON_PLAYSTATION?.value || 0;
       }
