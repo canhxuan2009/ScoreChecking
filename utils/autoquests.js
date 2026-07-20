@@ -334,16 +334,7 @@ class DiscordGatewayClient extends EventEmitter {
       case 'READY':
         this.sessionId = data.session_id;
         this.resumeGatewayUrl = data.resume_gateway_url;
-        console.log('\n═══════════════════════════════════════════════════');
-        console.log('🎉 ĐĂNG NHẬP THÀNH CÔNG!');
-        console.log('═══════════════════════════════════════════════════');
-        console.log(`   👤 User: ${data.user.username}#${data.user.discriminator}`);
-        console.log(`   🆔 ID: ${data.user.id}`);
-        console.log(`   📧 Email: ${data.user.email || 'Ẩn'}`);
-        console.log(`   📱 Session ID: ${data.session_id}`);
-        console.log(`   🏠 Guilds: ${data.guilds.length} server(s)`);
-        console.log(`   🔗 Resume URL: ${data.resume_gateway_url}`);
-        console.log('═══════════════════════════════════════════════════\n');
+        console.log(`\n🎉 Đăng nhập thành công: ${data.user.username}#${data.user.discriminator} (Guilds: ${data.guilds.length}, ID: ${data.user.id})`);
 
         // Khởi động trình quản lý Quest (Lấy danh sách và chạy)
         this.initQuestManager();
@@ -412,12 +403,7 @@ class DiscordGatewayClient extends EventEmitter {
       },
     };
 
-    console.log('\n📤 Gửi IDENTIFY...');
-    console.log('   Token: ' + this.token.substring(0, 10) + '...[ẩn]');
-    console.log('   Client: Discord Desktop App (Electron)');
-    console.log('   OS: ' + CONFIG.PROPERTIES.os + ' ' + CONFIG.PROPERTIES.os_version);
-    console.log('   Build: ' + CONFIG.PROPERTIES.client_build_number);
-    console.log('   Channel: ' + CONFIG.PROPERTIES.release_channel);
+    console.log(`\n📤 Gửi IDENTIFY (Token: ${this.token.substring(0, 10)}...)`);
     this.send(identifyPayload);
   }
 
@@ -459,9 +445,7 @@ class DiscordGatewayClient extends EventEmitter {
     const jitter = Math.random();
     const firstDelay = Math.floor(intervalMs * jitter);
 
-    console.log(`\n⏱️  Bắt đầu heartbeat`);
-    console.log(`   Interval: ${intervalMs}ms (${(intervalMs / 1000).toFixed(1)}s)`);
-    console.log(`   First beat in: ${firstDelay}ms (jitter: ${jitter.toFixed(2)})`);
+    console.log(`\n⏱️ Bắt đầu heartbeat (${(intervalMs / 1000).toFixed(1)}s interval, first in ${firstDelay}ms)`);
 
     // Gửi heartbeat đầu tiên
     setTimeout(() => {
@@ -471,7 +455,7 @@ class DiscordGatewayClient extends EventEmitter {
       this.heartbeatInterval = setInterval(() => {
         if (!this.heartbeatAcknowledged) {
           console.log('💔 Không nhận được Heartbeat ACK! Đang reconnect...');
-          this.ws.close();
+          this.ws.terminate(); // Terminate forcefully instead of close() to prevent hanging
           return;
         }
         this.sendHeartbeat();
@@ -520,14 +504,8 @@ class DiscordGatewayClient extends EventEmitter {
       },
     };
 
-    console.log('\n🎮 Cập nhật Presence:');
-    console.log(`   Status: ${status}`);
-    if (activities.length > 0) {
-      const activityTypeNames = ['Playing', 'Streaming', 'Listening to', 'Watching', 'Custom', 'Competing in'];
-      activities.forEach((act, i) => {
-        console.log(`   Activity ${i + 1}: ${activityTypeNames[act.type] || 'Unknown'} "${act.name}"`);
-      });
-    }
+    const activityNames = activities.map(a => a.name).join(', ');
+    console.log(`\n🎮 Cập nhật Presence: ${status}${activities.length > 0 ? ` | Activities: ${activityNames}` : ''}`);
     this.send(presencePayload);
   }
 
@@ -570,7 +548,7 @@ class DiscordGatewayClient extends EventEmitter {
     // Ghép 2 mảng: Play Quests chạy trước, Video Quests chạy sau
     this.questQueue = [...playQuests, ...videoQuests];
 
-    console.log(`✅ Đã nạp vào hàng đợi ${playQuests.length} nhiệm vụ Chơi Game và ${videoQuests.length} nhiệm vụ Xem Video.\n`);
+    console.log(`\n✅ Nạp Quest: ${playQuests.length} Game, ${videoQuests.length} Video`);
 
     // Emit danh sách quest cho external listeners
     this.emit('quest_list', {
@@ -615,9 +593,7 @@ class DiscordGatewayClient extends EventEmitter {
     const gameTitle = config.messages?.game_title || 'Game ẩn danh';
     const appId = config.application?.id;
 
-    console.log(`═══════════════════════════════════════════════════`);
-    console.log(`🎮 Đang bắt đầu xử lý Quest: ${gameTitle} (ID: ${questId})`);
-    console.log(`═══════════════════════════════════════════════════`);
+    console.log(`\n🎮 [${questId}] Bắt đầu Quest: ${gameTitle}`);
 
     const tasks = config.task_config_v2?.tasks || {};
     const isVideo = Object.keys(tasks).some(key => key.includes('WATCH'));
@@ -675,8 +651,15 @@ class DiscordGatewayClient extends EventEmitter {
       if (isVideo) {
         currentVideoTime += 60;
         if (currentVideoTime > target) currentVideoTime = target;
-        // Gửi tiến độ xem video (tính bằng giây)
+        
+        // Thử gửi vào endpoint video-progress
         res = await this.discordRequest('POST', `/quests/${questId}/video-progress`, { timestamp: currentVideoTime });
+        
+        // Nếu endpoint video không tồn tại (404), thử dùng heartbeat tiêu chuẩn
+        if (res.status === 404) {
+            console.log(`⚠️ [${questId}] video-progress trả về 404, chuyển sang dùng heartbeat tiêu chuẩn...`);
+            res = await this.discordRequest('POST', `/quests/${questId}/heartbeat`, { terminal: false });
+        }
       } else {
         // Gửi heartbeat chơi game
         res = await this.discordRequest('POST', `/quests/${questId}/heartbeat`, { terminal: false });
@@ -684,6 +667,15 @@ class DiscordGatewayClient extends EventEmitter {
       
       if (res.status !== 200) {
         console.log(`⚠️ [${questId}] Heartbeat trả về lỗi ${res.status}`);
+        console.log(`🔍 Chi tiết lỗi:`, res.body);
+        
+        if (res.status === 404) {
+            console.log(`❌ Hủy Quest ${questId} do API không hỗ trợ (404). Đang bỏ qua nhiệm vụ này...`);
+            clearInterval(this.questIntervals.get(questId));
+            this.questIntervals.delete(questId);
+            this.activeQuestsCount--;
+            this.tryStartNextQuest();
+        }
         return;
       }
 
@@ -760,15 +752,18 @@ class DiscordGatewayClient extends EventEmitter {
     }
   }
 
-  cleanup() {
+  cleanup(isIntentional = false) {
     if (this.heartbeatInterval) {
       clearInterval(this.heartbeatInterval);
       this.heartbeatInterval = null;
     }
-    for (const [id, interval] of this.questIntervals.entries()) {
-      clearInterval(interval);
+    // Only clear quest intervals if we are intentionally disconnecting
+    if (isIntentional) {
+      for (const [id, interval] of this.questIntervals.entries()) {
+        clearInterval(interval);
+      }
+      this.questIntervals.clear();
     }
-    this.questIntervals.clear();
   }
 
   handleReconnect(closeCode) {
@@ -806,7 +801,7 @@ class DiscordGatewayClient extends EventEmitter {
   disconnect() {
     console.log('\n👋 Đang ngắt kết nối...');
     this.intentionalDisconnect = true;
-    this.cleanup();
+    this.cleanup(true);
     if (this.ws) {
       this.ws.close(1000, 'User requested disconnect');
     }
@@ -818,12 +813,7 @@ class DiscordGatewayClient extends EventEmitter {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function runAutoQuest(token) {
-  console.log('\n═══════════════════════════════════════════════════════════');
-  console.log('  🚀 Khởi chạy hệ thống Auto Quest (thông qua Bot)');
-  console.log('═══════════════════════════════════════════════════════════');
-  console.log(`  ⏰ Thời gian: ${new Date().toLocaleString('vi-VN')}`);
-  console.log(`  💻 Máy: ${os.hostname()} (${os.platform()} ${os.arch()})`);
-  console.log('═══════════════════════════════════════════════════════════');
+  console.log(`\n🚀 Khởi chạy Auto Quest | ⏰ ${new Date().toLocaleString('vi-VN')} | 💻 ${os.hostname()}`);
 
   const client = new DiscordGatewayClient(token);
   client.connect();

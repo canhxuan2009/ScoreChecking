@@ -35,7 +35,7 @@ async function processQuestData(userInput, interaction, botClient) {
     }
 
     // Thêm vào hàng đợi
-    const { position, immediate } = queueManager.enqueue(userId, userTag, userInput);
+    const { position, immediate } = queueManager.enqueue(userId, userTag, userInput, interaction.channelId);
 
     if (immediate) {
         // Không có ai đang chạy → bắt đầu ngay

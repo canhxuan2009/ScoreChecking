@@ -32,12 +32,22 @@ const queue = [];
  * @param {string} content - Nội dung tin nhắn
  * @returns {Promise<import('discord.js').Message|null>}
  */
-async function sendDM(botClient, userId, content) {
+async function sendDM(botClient, userId, content, channelId) {
     try {
         const user = await botClient.users.fetch(userId);
         return await user.send(content);
     } catch (err) {
-        console.error(`[Queue] Không thể gửi DM cho ${userId}: ${err.message}`);
+        console.error(`[Queue] Không thể gửi DM cho ${userId}: ${err.message}. Đang thử gửi vào kênh...`);
+        if (channelId) {
+            try {
+                const channel = await botClient.channels.fetch(channelId);
+                if (channel && channel.isTextBased()) {
+                    return await channel.send(`<@${userId}>\n${content}`);
+                }
+            } catch (cErr) {
+                console.error(`[Queue] Lỗi gửi vào kênh fallback: ${cErr.message}`);
+            }
+        }
         return null;
     }
 }
@@ -144,8 +154,8 @@ function isBusy() {
  * Thêm người dùng vào hàng đợi
  * @returns {{ position: number, immediate: boolean }}
  */
-function enqueue(userId, userTag, token) {
-    queue.push({ userId, userTag, token, addedAt: Date.now(), dmMessage: null });
+function enqueue(userId, userTag, token, channelId) {
+    queue.push({ userId, userTag, token, channelId, addedAt: Date.now(), dmMessage: null });
     const position = queue.length;
     const immediate = !isBusy();
     return { position, immediate };
@@ -161,12 +171,13 @@ async function startNext(botClient) {
 
     // Lấy người đầu tiên ra khỏi hàng đợi
     const entry = queue.shift();
-    const { userId, userTag, token } = entry;
+    const { userId, userTag, token, channelId } = entry;
 
     // Tạo session mới
     activeSession = {
         userId,
         userTag,
+        channelId,
         gatewayClient: null,
         dmMessage: null,
         heartbeatCount: 0,
@@ -183,7 +194,7 @@ async function startNext(botClient) {
     console.log(`\n[Queue] ▶️ Bắt đầu phiên cho ${userTag} (${userId})`);
 
     // Gửi DM thông báo bắt đầu
-    const dmMsg = await sendDM(botClient, userId, '🚀 **Đến lượt của bạn!** Đang khởi chạy Auto Quest...');
+    const dmMsg = await sendDM(botClient, userId, '🚀 **Đến lượt của bạn!** Đang khởi chạy Auto Quest...', channelId);
     activeSession.dmMessage = dmMsg;
 
     // Khởi chạy Gateway Client
@@ -248,7 +259,7 @@ async function startNext(botClient) {
         console.log(`[Queue] 🎉 ${userTag} | Tất cả quest đã hoàn thành!`);
 
         // Gửi DM tổng kết (tin nhắn mới)
-        await sendDM(botClient, userId, '🎉 **Hoàn thành tất cả nhiệm vụ!**\nBạn có thể vào Discord để nhận phần thưởng.');
+        await sendDM(botClient, userId, '🎉 **Hoàn thành tất cả nhiệm vụ!**\nBạn có thể vào Discord để nhận phần thưởng.', activeSession.channelId);
 
         // Ngắt kết nối gateway
         gwClient.disconnect();
@@ -269,7 +280,7 @@ async function startNext(botClient) {
         console.error(`[Queue] ❌ ${userTag} | Lỗi: ${data.message}`);
 
         // Gửi DM thông báo lỗi
-        await sendDM(botClient, userId, `❌ **Lỗi Auto Quest:** ${data.message}\nPhiên đã bị hủy. Vui lòng thử lại.`);
+        await sendDM(botClient, userId, `❌ **Lỗi Auto Quest:** ${data.message}\nPhiên đã bị hủy. Vui lòng thử lại.`, activeSession.channelId);
 
         // Xóa session
         clearSession();
@@ -309,7 +320,7 @@ async function updateQueuePositions(botClient) {
         if (entry.dmMessage) {
             await editDM(entry.dmMessage, content);
         } else {
-            entry.dmMessage = await sendDM(botClient, entry.userId, content);
+            entry.dmMessage = await sendDM(botClient, entry.userId, content, entry.channelId);
         }
     }
 }
