@@ -645,6 +645,13 @@ class DiscordGatewayClient extends EventEmitter {
     const appId = quest.config.application?.id;
 
     let currentVideoTime = 0; // Biến lưu thời gian đã xem (dành cho Video Quest)
+    if (isVideo) {
+      const progressObj = quest.user_status?.progress || {};
+      const key = Object.keys(progressObj).find(k => k.includes('WATCH'));
+      if (key && progressObj[key]) {
+        currentVideoTime = progressObj[key].value || 0;
+      }
+    }
 
     const sendBeat = async () => {
       let res;
