@@ -1,33 +1,64 @@
 /**
  * File xử lý dữ liệu đầu vào từ Discord Bot (Backend Processor)
- * Bạn có thể viết logic backend nặng, kết nối database hoặc gọi các file thực thi khác tại đây.
+ * Tích hợp Queue Manager để quản lý hàng đợi người dùng.
  */
+
+const queueManager = require('./queueManager');
 
 /**
  * Xử lý dữ liệu cấu hình Quest nhận được từ người dùng
- * @param {string} userInput Dữ liệu người dùng nhập từ Modal
+ * @param {string} userInput Dữ liệu người dùng nhập từ Modal (token)
  * @param {import('discord.js').Interaction} interaction Đối tượng tương tác từ Discord
+ * @param {import('discord.js').Client} botClient Discord Bot Client để gửi DM
  * @returns {Promise<{success: boolean, message: string}>}
  */
-async function processQuestData(userInput, interaction) {
-    console.log(`[Processor] Đang xử lý dữ liệu từ ${interaction.user.tag}: ${userInput}`);
+async function processQuestData(userInput, interaction, botClient) {
+    const userId = interaction.user.id;
+    const userTag = interaction.user.tag;
 
-    const { runAutoQuest } = require('./autoquests');
+    console.log(`[Processor] Nhận yêu cầu từ ${userTag} (${userId})`);
 
-    try {
-        // Chạy Auto Quest với token (userInput)
-        runAutoQuest(userInput);
-    } catch (err) {
+    // Kiểm tra user đã có trong hệ thống chưa
+    const status = queueManager.isUserInSystem(userId);
+    if (status === 'active') {
         return {
             success: false,
-            message: `Có lỗi khi khởi chạy Auto Quest: ${err.message}`
+            message: 'Bạn đang có phiên Auto Quest đang chạy! Vui lòng chờ hoàn thành.'
+        };
+    }
+    if (status === 'queued') {
+        const pos = queueManager.getPosition(userId);
+        return {
+            success: false,
+            message: `Bạn đã có trong hàng đợi ở vị trí **#${pos}**. Vui lòng chờ đến lượt.`
         };
     }
 
-    return {
-        success: true,
-        message: `Dữ liệu cấu hình \`${userInput}\` đã được gửi tới bộ xử lý backend thành công!`
-    };
+    // Thêm vào hàng đợi
+    const { position, immediate } = queueManager.enqueue(userId, userTag, userInput);
+
+    if (immediate) {
+        // Không có ai đang chạy → bắt đầu ngay
+        try {
+            await queueManager.startNext(botClient);
+        } catch (err) {
+            console.error('[Processor] Lỗi khởi chạy Auto Quest:', err);
+            return {
+                success: false,
+                message: `Có lỗi khi khởi chạy Auto Quest: ${err.message}`
+            };
+        }
+        return {
+            success: true,
+            message: '🚀 Auto Quest đang được khởi chạy! Kiểm tra DM để theo dõi tiến độ.'
+        };
+    } else {
+        // Đang có người chạy → xếp hàng
+        return {
+            success: true,
+            message: `⏳ Đã thêm bạn vào hàng đợi ở vị trí **#${position}**. Bot sẽ DM thông báo khi đến lượt.`
+        };
+    }
 }
 
 module.exports = {

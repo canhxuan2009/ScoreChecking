@@ -24,6 +24,7 @@ require('dotenv').config();
 const WebSocket = require('ws');
 const os = require('os');
 const https = require('https');
+const { EventEmitter } = require('events');
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CẤU HÌNH
@@ -98,8 +99,9 @@ const CONFIG = {
 // LỚP DISCORD GATEWAY CLIENT
 // ─────────────────────────────────────────────────────────────────────────────
 
-class DiscordGatewayClient {
+class DiscordGatewayClient extends EventEmitter {
   constructor(token) {
+    super();
     if (!token || token === 'your_token_here') {
       console.error('❌ Lỗi: Vui lòng đặt DISCORD_TOKEN trong file .env');
       process.exit(1);
@@ -569,6 +571,14 @@ class DiscordGatewayClient {
     this.questQueue = [...playQuests, ...videoQuests];
 
     console.log(`✅ Đã nạp vào hàng đợi ${playQuests.length} nhiệm vụ Chơi Game và ${videoQuests.length} nhiệm vụ Xem Video.\n`);
+
+    // Emit danh sách quest cho external listeners
+    this.emit('quest_list', {
+      playQuests: playQuests.map(q => ({ id: q.config.id, title: q.config.messages?.game_title || 'Game ẩn danh' })),
+      videoQuests: videoQuests.map(q => ({ id: q.config.id, title: q.config.messages?.game_title || 'Video ẩn danh' })),
+      totalCount: this.questQueue.length
+    });
+
     this.tryStartNextQuest();
   }
 
@@ -577,6 +587,7 @@ class DiscordGatewayClient {
       if (this.activeQuestsCount === 0 && this.questQueue.length === 0) {
         console.log('🎉 TOÀN BỘ NHIỆM VỤ ĐÃ HOÀN THÀNH!');
         this.updatePresence({ status: CONFIG.STATUS_TYPES.IDLE, activities: [] });
+        this.emit('all_complete', {});
       }
       return;
     }
@@ -617,6 +628,9 @@ class DiscordGatewayClient {
     } else {
       target = tasks.PLAY_ON_DESKTOP?.target || tasks.PLAY_ON_PLAYSTATION?.target || 900;
     }
+
+    // Emit quest_start cho external listeners
+    this.emit('quest_start', { questId, gameTitle, isVideo, target });
 
     // 1. Kiểm tra đã enroll chưa, chưa thì tự enroll
     if (!user_status?.enrolled_at) {
@@ -675,6 +689,10 @@ class DiscordGatewayClient {
       
       console.log(`🎁 [${questId}] Tiến độ: ${bar} ${pct}% (${progress}s / ${target}s)`);
 
+      // Emit quest_progress cho external listeners
+      const gameTitle = quest.config.messages?.game_title || 'Game ẩn danh';
+      this.emit('quest_progress', { questId, gameTitle, progress, target, pct });
+
       // Nếu đủ 100%, kết thúc quest hiện tại
       if (progress >= target) {
         clearInterval(this.questIntervals.get(questId));
@@ -689,6 +707,9 @@ class DiscordGatewayClient {
             activities: Array.from(this.activeActivities.values())
           });
         }
+
+        // Emit quest_complete cho external listeners
+        this.emit('quest_complete', { questId, gameTitle });
 
         console.log(`✅ [${questId}] Quest đã hoàn thành (100%)! [Lưu ý: Cần vào Discord tự nhận thưởng]`);
         
@@ -750,6 +771,7 @@ class DiscordGatewayClient {
     if (nonRecoverableCodes.includes(closeCode)) {
       console.log('❌ Lỗi không thể khôi phục. Dừng kết nối.');
       console.log('   Kiểm tra lại token hoặc intents.');
+      this.emit('error', { message: `Lỗi kết nối không thể khôi phục (code: ${closeCode}). Kiểm tra lại token.` });
       return;
     }
 

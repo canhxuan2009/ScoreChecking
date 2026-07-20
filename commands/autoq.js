@@ -32,8 +32,8 @@ module.exports = {
         await interaction.deferReply({ ephemeral: true });
 
         try {
-            // Gọi module xử lý ở file khác
-            const result = await processQuestData(userInput, interaction);
+            // Gọi module xử lý ở file khác (truyền botClient để gửi DM)
+            const result = await processQuestData(userInput, interaction, interaction.client);
 
             if (result.success) {
                 await interaction.editReply({
