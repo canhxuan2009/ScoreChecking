@@ -106,7 +106,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     const authorizedGuildId = process.env.DISCORD_GUILD_ID || process.env.GUILD_ID;
     if (authorizedGuildId && authorizedGuildId.trim() !== '' && interaction.guildId !== authorizedGuildId) {
         console.log(`[SECURITY] Phát hiện tương tác từ guild lạ hoặc cá nhân (Guild ID: ${interaction.guildId}).`);
-        const replyContent = { content: '❌ Bot này ở chế độ riêng tư và chỉ hoạt động trên máy chủ được chỉ định!', ephemeral: true };
+        const replyContent = { content: '❌ Bot này ở chế độ riêng tư và chỉ hoạt động trên máy chủ được chỉ định!', flags: 64 };
         
         try {
             if (interaction.isRepliable()) {
@@ -131,9 +131,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
         } catch (error) {
             console.error(`[ERROR] Lỗi thực thi lệnh ${interaction.commandName}:`, error);
             if (interaction.replied || interaction.deferred) {
-                await interaction.followUp({ content: 'Có lỗi xảy ra khi thực thi lệnh này!', ephemeral: true });
+                await interaction.followUp({ content: 'Có lỗi xảy ra khi thực thi lệnh này!', flags: 64 });
             } else {
-                await interaction.reply({ content: 'Có lỗi xảy ra khi thực thi lệnh này!', ephemeral: true });
+                await interaction.reply({ content: 'Có lỗi xảy ra khi thực thi lệnh này!', flags: 64 });
             }
         }
     } else if (interaction.isModalSubmit()) {
@@ -143,8 +143,16 @@ client.on(Events.InteractionCreate, async (interaction) => {
                 try {
                     await command.handleModal(interaction);
                 } catch (error) {
-                    console.error('[ERROR] Lỗi xử lý Modal Submit:', error);
-                    await interaction.reply({ content: 'Có lỗi xảy ra khi xử lý dữ liệu nhập vào!', ephemeral: true });
+                    console.error('[ERROR] Lỗi xử lý Modal Submit:', error.message);
+                    try {
+                        if (interaction.replied || interaction.deferred) {
+                            await interaction.followUp({ content: 'Có lỗi xảy ra khi xử lý dữ liệu nhập vào!', flags: 64 });
+                        } else {
+                            await interaction.reply({ content: 'Có lỗi xảy ra khi xử lý dữ liệu nhập vào!', flags: 64 });
+                        }
+                    } catch (replyErr) {
+                        console.error('[ERROR] Lỗi khi gửi phản hồi lỗi:', replyErr.message);
+                    }
                 }
             }
         }

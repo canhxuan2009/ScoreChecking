@@ -28,8 +28,13 @@ module.exports = {
         const userInput = interaction.fields.getTextInputValue('questDataInput');
         console.log(`[Interaction - AutoQ] Người dùng ${interaction.user.tag} đã gửi modal.`);
 
-        // Trả lời trì hoãn (deferReply) để tránh bot bị timeout (nếu xử lý backend nặng > 3s)
-        await interaction.deferReply({ ephemeral: true });
+        // Trả lời trì hoãn (deferReply) để tránh bot bị timeout
+        try {
+            await interaction.deferReply({ flags: 64 }); // 64 = Ephemeral
+        } catch (err) {
+            console.log(`[Warning] Không thể deferReply (có thể bot khác đã xử lý): ${err.message}`);
+            return; // Dừng xử lý nếu đã bị acknowledge bởi instance khác
+        }
 
         try {
             // Gọi module xử lý ở file khác (truyền botClient để gửi DM)
@@ -45,10 +50,12 @@ module.exports = {
                 });
             }
         } catch (error) {
-            console.error('[ERROR] Lỗi xử lý dữ liệu qua bộ xử lý:', error);
-            await interaction.editReply({
-                content: `❌ Có lỗi hệ thống xảy ra trong quá trình xử lý dữ liệu.`
-            });
+            console.error('[ERROR] Lỗi xử lý dữ liệu qua bộ xử lý:', error.message);
+            try {
+                await interaction.editReply({
+                    content: `❌ Có lỗi hệ thống xảy ra trong quá trình xử lý dữ liệu.`
+                });
+            } catch (err) {}
         }
     }
 };
